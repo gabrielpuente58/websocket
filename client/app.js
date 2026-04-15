@@ -33,7 +33,7 @@ createApp({
   template: `
     <template v-if="screen === 'lobby'">
       <div class="screen">
-        <h1>🎮 Co-op Shooter</h1>
+        <h1><i class="fa-solid fa-gamepad"></i> Co-op Shooter</h1>
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:center;margin-bottom:8px;">
             <span class="status-dot" :class="{ connected }"></span>
@@ -65,7 +65,7 @@ createApp({
               class="player-hud-label"
               :style="{ color: player.id === 0 ? '#00d4ff' : '#ff6b35' }"
             >
-              {{ player.id === myPlayerId ? '▶ ' : '' }}Player {{ player.id + 1 }}
+              <i v-if="player.id === myPlayerId" class="fa-solid fa-caret-right"></i> Player {{ player.id + 1 }}
               <span v-if="!player.alive" style="color:#ff4444;font-size:10px;"> (Dead)</span>
             </div>
             <div class="health-bar-bg" style="width:120px;">
@@ -92,27 +92,39 @@ createApp({
               class="dpad-btn"
               @touchstart.prevent="dpadPress(0, -1)"
               @touchend.prevent="dpadRelease('y')"
-            >▲</button>
+              @mousedown.prevent="dpadPress(0, -1)"
+              @mouseup.prevent="dpadRelease('y')"
+              @mouseleave="dpadRelease('y')"
+            ><i class="fa-solid fa-caret-up"></i></button>
             <div class="dpad-btn transparent"></div>
 
             <button
               class="dpad-btn"
               @touchstart.prevent="dpadPress(-1, 0)"
               @touchend.prevent="dpadRelease('x')"
-            >◀</button>
+              @mousedown.prevent="dpadPress(-1, 0)"
+              @mouseup.prevent="dpadRelease('x')"
+              @mouseleave="dpadRelease('x')"
+            ><i class="fa-solid fa-caret-left"></i></button>
             <div class="dpad-btn transparent"></div>
             <button
               class="dpad-btn"
               @touchstart.prevent="dpadPress(1, 0)"
               @touchend.prevent="dpadRelease('x')"
-            >▶</button>
+              @mousedown.prevent="dpadPress(1, 0)"
+              @mouseup.prevent="dpadRelease('x')"
+              @mouseleave="dpadRelease('x')"
+            ><i class="fa-solid fa-caret-right"></i></button>
 
             <div class="dpad-btn transparent"></div>
             <button
               class="dpad-btn"
               @touchstart.prevent="dpadPress(0, 1)"
               @touchend.prevent="dpadRelease('y')"
-            >▼</button>
+              @mousedown.prevent="dpadPress(0, 1)"
+              @mouseup.prevent="dpadRelease('y')"
+              @mouseleave="dpadRelease('y')"
+            ><i class="fa-solid fa-caret-down"></i></button>
             <div class="dpad-btn transparent"></div>
           </div>
 
@@ -120,7 +132,10 @@ createApp({
             class="shoot-btn"
             @touchstart.prevent="startShooting"
             @touchend.prevent="stopShooting"
-          >🔫</button>
+            @mousedown.prevent="startShooting"
+            @mouseup.prevent="stopShooting"
+            @mouseleave="stopShooting"
+          ><i class="fa-solid fa-crosshairs"></i></button>
         </div>
       </div>
     </template>
@@ -129,7 +144,8 @@ createApp({
       <div class="screen">
         <div class="card">
           <h2 :class="gameResult === 'win' ? 'result-win' : 'result-lose'">
-            {{ gameResult === 'win' ? '🏆 Victory!' : '💀 Defeated' }}
+            <i :class="gameResult === 'win' ? 'fa-solid fa-trophy' : 'fa-solid fa-skull'"></i>
+            {{ gameResult === 'win' ? ' Victory!' : ' Defeated' }}
           </h2>
           <p>Score: <strong style="font-size:1.4em;color:#fff;">{{ finalScore }}</strong></p>
           <p>Wave reached: <strong>{{ waveNumber }}</strong></p>

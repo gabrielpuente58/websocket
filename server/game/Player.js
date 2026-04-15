@@ -27,6 +27,10 @@ class Player {
     this._dy = 0;
     this._shooting = false;
 
+    // Last non-zero direction — used for shooting when standing still (default: face right)
+    this._lastDx = 1;
+    this._lastDy = 0;
+
     // WebSocket reference (set by GameRoom)
     this.ws = null;
   }
@@ -71,21 +75,22 @@ class Player {
       this.shootCooldown--;
     }
 
-    // Attempt to fire
+    // Track last movement direction for aiming while standing still
+    if (this._dx !== 0 || this._dy !== 0) {
+      this._lastDx = this._dx;
+      this._lastDy = this._dy;
+    }
+
+    // Attempt to fire — uses last known direction if currently standing still
     if (this._shooting && this.shootCooldown === 0) {
-      const ddx = this._dx;
-      const ddy = this._dy;
+      const ddx = this._lastDx;
+      const ddy = this._lastDy;
+      const len = Math.sqrt(ddx * ddx + ddy * ddy);
+      const ndx = ddx / len;
+      const ndy = ddy / len;
 
-      // Only fire if a direction is given
-      if (ddx !== 0 || ddy !== 0) {
-        const len = Math.sqrt(ddx * ddx + ddy * ddy);
-        const ndx = ddx / len;
-        const ndy = ddy / len;
-
-        this.shootCooldown = this.SHOOT_COOLDOWN;
-
-        return new Bullet(this.x, this.y, ndx, ndy, this.id);
-      }
+      this.shootCooldown = this.SHOOT_COOLDOWN;
+      return new Bullet(this.x, this.y, ndx, ndy, this.id);
     }
 
     return null;
