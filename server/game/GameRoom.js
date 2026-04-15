@@ -4,9 +4,37 @@ const Player = require('./Player');
 const Bot = require('./Bot');
 const Bullet = require('./Bullet');
 const GameMap = require('./Map');
+const Powerup = require('./Powerup');
 
 const TICK_RATE_MS = 50; // 20 ticks per second
-const MAX_WAVES = 3;
+const REVIVE_RADIUS = 1.5;   // tiles — how close partner must be
+const REVIVE_RATE   = 2;     // progress points per tick while nearby (100 = ~2.5s)
+const REVIVE_DECAY  = 1;     // progress lost per tick when partner leaves
+
+const POWERUP_KINDS = ['health', 'rapidfire', 'shield'];
+
+function randomPowerupKind() {
+  return POWERUP_KINDS[Math.floor(Math.random() * POWERUP_KINDS.length)];
+}
+
+/**
+ * Build wave bot composition that scales with wave number.
+ *   Wave 1: 2 scouts, 1 standard
+ *   Each wave adds more of each type; bosses appear from wave 3, one extra every 2 waves.
+ */
+function buildWaveComposition(waveNumber) {
+  const scouts    = 2 + Math.floor(waveNumber / 2);
+  const standards = 1 + Math.floor(waveNumber * 0.8);
+  const heavies   = waveNumber >= 2 ? Math.floor((waveNumber - 1) * 0.5) : 0;
+  const bosses    = waveNumber >= 3 ? Math.floor((waveNumber - 2) / 2)    : 0;
+
+  return [
+    ...Array(scouts).fill('scout'),
+    ...Array(standards).fill('standard'),
+    ...Array(heavies).fill('heavy'),
+    ...Array(bosses).fill('boss'),
+  ];
+}
 
 class GameRoom {
   constructor(id, onGameOver) {
@@ -15,13 +43,13 @@ class GameRoom {
     this.players = [];
     this.bots = [];
     this.bullets = [];
+    this.powerups = [];
     this.gameState = 'waiting'; // 'waiting' | 'playing' | 'over'
     this.wave = 0;
     this.tickCount = 0;
     this._interval = null;
-    this._waveTransitioning = false; // guard against multiple wave-spawns
+    this._waveTransitioning = false;
 
-    // Called when game ends — injected by index.js
     this.onGameOver = typeof onGameOver === 'function' ? onGameOver : null;
   }
 
@@ -31,8 +59,6 @@ class GameRoom {
 
   /**
    * Add a player to the room. Assigns spawn position from map.
-   * Starts the game once 2 players are connected.
-   * Returns the created Player instance.
    */
   addPlayer(ws) {
     const id = this.players.length; // 0 or 1
@@ -40,35 +66,27 @@ class GameRoom {
     const spawn = this.map.playerSpawns[id];
     player.x = spawn.x;
     player.y = spawn.y;
+    player.spawnX = spawn.x;
+    player.spawnY = spawn.y;
     player.ws = ws;
     this.players.push(player);
     return player;
   }
 
-  // Called by index.js once both players have sent 'ready'
   startGame() {
     if (this.gameState !== 'waiting') return;
     this._startGame();
   }
 
-  /**
-   * Forward input to the correct player. Only processed while game is playing.
-   */
   handleInput(playerId, dx, dy, shooting) {
     if (this.gameState !== 'playing') return;
     const player = this.players[playerId];
-    if (player) {
-      player.applyInput(dx, dy, shooting);
-    }
+    if (player) player.applyInput(dx, dy, shooting);
   }
 
-  /**
-   * Begin the game: set state, send map + player ids, start wave 1, kick off tick loop.
-   */
   _startGame() {
     this.gameState = 'playing';
 
-    // Notify each player individually so they know their own id
     for (const player of this.players) {
       this._sendTo(player.ws, {
         type: 'game_start',
@@ -82,22 +100,24 @@ class GameRoom {
   }
 
   /**
-   * Spawn a new wave of bots at random open edge tiles.
+   * Spawn a wave with dynamically scaled composition.
    */
   _spawnWave(waveNumber) {
     this.wave = waveNumber;
     this.broadcast({ type: 'wave_start', wave: waveNumber });
 
     const edgeTiles = this.map.getOpenEdgeTiles();
-    const count = 4 + waveNumber * 2;
+    const composition = buildWaveComposition(waveNumber);
 
-    for (let i = 0; i < count; i++) {
-      if (edgeTiles.length === 0) break;
-      const idx = Math.floor(Math.random() * edgeTiles.length);
-      const tile = edgeTiles[idx];
-      // Position bot at tile center
-      const bot = new Bot(tile.x + 0.5, tile.y + 0.5);
-      this.bots.push(bot);
+    // Shuffle edge tiles so bots don't all pile at same corner
+    for (let i = edgeTiles.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [edgeTiles[i], edgeTiles[j]] = [edgeTiles[j], edgeTiles[i]];
+    }
+
+    for (let i = 0; i < composition.length; i++) {
+      const tile = edgeTiles[i % edgeTiles.length];
+      this.bots.push(new Bot(tile.x + 0.5, tile.y + 0.5, composition[i]));
     }
   }
 
@@ -109,84 +129,120 @@ class GameRoom {
 
     this.tickCount++;
 
-    // 1. Update players — collect any bullets fired this tick
+    // 1. Update players — collect bullets
     for (const player of this.players) {
-      if (!player.alive) continue;
       const bullet = player.update(this.map);
-      if (bullet) {
-        this.bullets.push(bullet);
-      }
+      if (bullet) this.bullets.push(bullet);
     }
 
-    // 2. Update bots
+    // 2. Update bots — collect boss bullets
     for (const bot of this.bots) {
       if (!bot.alive) continue;
-      bot.update(this.players, this.map, this.tickCount);
+      const botBullets = bot.update(this.players, this.map, this.tickCount);
+      for (const b of botBullets) this.bullets.push(b);
     }
 
-    // 3. Update bullets and check bot collisions
+    // 3. Update bullets and resolve collisions
     for (const bullet of this.bullets) {
       if (!bullet.alive) continue;
       bullet.update(this.map);
       if (!bullet.alive) continue;
 
-      for (const bot of this.bots) {
-        if (!bot.alive) continue;
-        const dx = bullet.x - bot.x;
-        const dy = bullet.y - bot.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < 0.5) {
-          bot.takeDamage(35);
-          bullet.alive = false;
-
-          // Award score to the owning player
-          const shooter = this.players[bullet.ownerId];
-          if (shooter) {
-            shooter.score += 10;
+      if (bullet.fromBot) {
+        for (const player of this.players) {
+          if (!player.alive) continue;
+          if (Math.hypot(bullet.x - player.x, bullet.y - player.y) < 0.5) {
+            player.takeDamage(20);
+            bullet.alive = false;
+            break;
           }
-
-          break; // Bullet can only hit one bot
+        }
+      } else {
+        for (const bot of this.bots) {
+          if (!bot.alive) continue;
+          if (Math.hypot(bullet.x - bot.x, bullet.y - bot.y) < 0.5) {
+            bot.takeDamage(35);
+            bullet.alive = false;
+            const shooter = this.players[bullet.ownerId];
+            if (shooter) shooter.score += bot.scoreValue;
+            break;
+          }
         }
       }
     }
 
-    // 4. Clean up dead bullets and bots
-    this.bullets = this.bullets.filter(b => b.alive);
-    this.bots = this.bots.filter(b => b.alive);
+    // 4. Tick powerups and check pickups
+    for (const powerup of this.powerups) powerup.tick();
 
-    // 5. Check win/loss conditions
-    const allBotsGone = this.bots.length === 0;
-    const allPlayersDead = this.players.every(p => !p.alive);
+    for (const powerup of this.powerups) {
+      if (!powerup.alive) continue;
+      for (const player of this.players) {
+        if (!player.alive) continue;
+        if (Math.hypot(player.x - powerup.x, player.y - powerup.y) < 0.6) {
+          player.applyPowerup(powerup.kind);
+          powerup.alive = false;
+          break;
+        }
+      }
+    }
 
-    if (allPlayersDead) {
+    // 5. Spawn powerups on bot death
+    const justDied = this.bots.filter(b => !b.alive);
+    for (const bot of justDied) {
+      if (Math.random() < 0.25) {
+        this.powerups.push(new Powerup(bot.x, bot.y, randomPowerupKind()));
+      }
+    }
+
+    // Filter dead entities
+    this.bullets  = this.bullets.filter(b => b.alive);
+    this.bots     = this.bots.filter(b => b.alive);
+    this.powerups = this.powerups.filter(p => p.alive);
+
+    // 6. Cooperative revive logic
+    //    Dead players gain reviveProgress when a living partner stands nearby.
+    //    Progress decays when nobody is close. At 100: revived with 60 HP.
+    for (const dead of this.players) {
+      if (dead.alive) continue;
+
+      const hasNearbyAlly = this.players.some(
+        p => p.alive && Math.hypot(p.x - dead.x, p.y - dead.y) < REVIVE_RADIUS
+      );
+
+      if (hasNearbyAlly) {
+        dead.reviveProgress = Math.min(100, dead.reviveProgress + REVIVE_RATE);
+        if (dead.reviveProgress >= 100) {
+          dead.revive();
+        }
+      } else {
+        dead.reviveProgress = Math.max(0, dead.reviveProgress - REVIVE_DECAY);
+      }
+    }
+
+    // 7. Win/lose check
+    //    All players dead and none can be revived (no living partner) = game over
+    const allDead = this.players.every(p => !p.alive);
+    if (allDead) {
       this._endGame('lose');
       return;
     }
 
-    if (allBotsGone && !this._waveTransitioning) {
-      if (this.wave < MAX_WAVES) {
-        this._waveTransitioning = true;
-        const nextWave = this.wave + 1;
-        setTimeout(() => {
-          if (this.gameState === 'playing') {
-            this._spawnWave(nextWave);
-            this._waveTransitioning = false;
-          }
-        }, 2000);
-      } else {
-        this._endGame('win');
-        return;
-      }
+    // All bots cleared — spawn next wave (unlimited)
+    if (this.bots.length === 0 && !this._waveTransitioning) {
+      this._waveTransitioning = true;
+      const nextWave = this.wave + 1;
+      setTimeout(() => {
+        if (this.gameState === 'playing') {
+          this._spawnWave(nextWave);
+          this._waveTransitioning = false;
+        }
+      }, 2000);
     }
 
-    // 6. Broadcast current state
+    // 8. Broadcast state
     this._broadcastState();
   }
 
-  /**
-   * End the game, clean up, notify players and external callback.
-   */
   _endGame(result) {
     this.gameState = 'over';
 
@@ -205,57 +261,34 @@ class GameRoom {
     });
 
     if (typeof this.onGameOver === 'function') {
-      this.onGameOver({
-        roomId: this.id,
-        result,
-        score: totalScore,
-        wave: this.wave,
-      });
+      this.onGameOver({ roomId: this.id, result, score: totalScore, wave: this.wave });
     }
   }
 
-  /**
-   * Send a message to all players whose WebSocket is open (readyState === 1).
-   */
   broadcast(msg) {
     const data = JSON.stringify(msg);
-    for (const player of this.players) {
-      this._sendRaw(player.ws, data);
-    }
+    for (const player of this.players) this._sendRaw(player.ws, data);
   }
 
-  /**
-   * Broadcast the full game state snapshot to all players.
-   */
   _broadcastState() {
     this.broadcast({
       type: 'game_state',
       players: this.players.map(p => p.toJSON()),
       bots: this.bots.map(b => b.toJSON()),
       bullets: this.bullets.map(b => b.toJSON()),
+      powerups: this.powerups.map(p => p.toJSON()),
     });
   }
 
-  /**
-   * Handle a player disconnecting mid-game.
-   */
   removePlayer(playerId) {
-    if (this.gameState === 'playing') {
-      this._endGame('lose');
-    }
+    if (this.gameState === 'playing') this._endGame('lose');
     this.players = this.players.filter(p => p.id !== playerId);
   }
 
-  // ── Internal helpers ──────────────────────────────────────────────────────
-
-  _sendTo(ws, msg) {
-    this._sendRaw(ws, JSON.stringify(msg));
-  }
+  _sendTo(ws, msg) { this._sendRaw(ws, JSON.stringify(msg)); }
 
   _sendRaw(ws, data) {
-    if (ws && ws.readyState === 1) {
-      ws.send(data);
-    }
+    if (ws && ws.readyState === 1) ws.send(data);
   }
 }
 
