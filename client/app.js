@@ -425,12 +425,45 @@ createApp({
 
       // Players
       for (const player of this.gameData.players || []) {
-        if (player.alive === false && !(player.reviveProgress > 0)) continue;
-
         const px = player.x * TILE_SIZE;
         const py = player.y * TILE_SIZE;
         const color = player.id === 0 ? COLORS.player0 : COLORS.player1;
         const hpRatio = Math.max(0, Math.min(100, player.hp ?? 100)) / 100;
+
+        // Dead — draw a death marker at the death location and a revive-progress ring.
+        if (player.alive === false) {
+          const progress = player.reviveProgress ?? 0;
+
+          ctx.save();
+          ctx.globalAlpha = 0.35;
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(px, py, 14, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.globalAlpha = 0.9;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(px - 7, py - 7);
+          ctx.lineTo(px + 7, py + 7);
+          ctx.moveTo(px + 7, py - 7);
+          ctx.lineTo(px - 7, py + 7);
+          ctx.stroke();
+          ctx.restore();
+
+          if (progress > 0) {
+            ctx.save();
+            ctx.strokeStyle = '#00ff88';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(px, py, 22, -Math.PI / 2, -Math.PI / 2 + (progress / 100) * Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          continue;
+        }
 
         const prev = this.prevPositions[player.id];
         if (prev) {
@@ -443,7 +476,6 @@ createApp({
         this.prevPositions[player.id] = { x: player.x, y: player.y };
 
         ctx.save();
-        if (!player.alive) ctx.globalAlpha = 0.2;
 
         if (player.shield) {
           ctx.save();
@@ -497,20 +529,7 @@ createApp({
         }
         ctx.restore();
 
-        if (!player.alive) {
-          const progress = player.reviveProgress ?? 0;
-          if (progress > 0) {
-            ctx.save();
-            ctx.strokeStyle = '#00ff88';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.arc(px, py, 22, -Math.PI / 2, -Math.PI / 2 + (progress / 100) * Math.PI * 2);
-            ctx.stroke();
-            ctx.restore();
-          }
-        } else {
-          this.drawEntityHPBar(ctx, px, py - 22, 32, hpRatio);
-        }
+        this.drawEntityHPBar(ctx, px, py - 22, 32, hpRatio);
       }
     },
 
