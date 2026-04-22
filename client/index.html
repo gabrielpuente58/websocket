@@ -5,11 +5,165 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Co-op Shooter</title>
   <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <div id="app"></div>
-  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-  <script src="app.js"></script>
+<div id="app">
+
+  <!-- AUTH -->
+  <template v-if="screen === 'auth'">
+    <div class="screen">
+      <div class="auth-card">
+        <h2 class="auth-title">Co-op Shooter</h2>
+
+        <div class="auth-tabs">
+          <button :class="['auth-tab', { active: authTab === 'login' }]" @click="authTab='login'; authError=''">Login</button>
+          <button :class="['auth-tab', { active: authTab === 'register' }]" @click="authTab='register'; authError=''">Register</button>
+        </div>
+
+        <form class="auth-form" @submit.prevent="authTab === 'login' ? login() : register()">
+          <input class="auth-input" v-model="authUsername" type="text" placeholder="Username" autocomplete="username" maxlength="20" />
+          <input class="auth-input" v-model="authPassword" type="password" placeholder="Password" autocomplete="current-password" />
+          <div class="auth-error" v-if="authError">{{ authError }}</div>
+          <button class="btn auth-submit-btn" type="submit" :disabled="authLoading">
+            {{ authLoading ? '...' : (authTab === 'login' ? 'Login' : 'Create Account') }}
+          </button>
+        </form>
+      </div>
+    </div>
+  </template>
+
+  <!-- START -->
+  <template v-else-if="screen === 'start'">
+    <div class="screen start-screen">
+      <h1>Co-op Shooter</h1>
+      <p class="subtitle">INSERT COIN TO PLAY</p>
+
+      <div class="auth-user-bar" v-if="currentUser">
+        <span>{{ currentUser.username }}</span>
+        <button class="btn btn-ghost" @click="logout">Logout</button>
+      </div>
+
+      <button class="btn mode-card" @click="startGame">
+        <span class="mode-card-title">START</span>
+        <span class="mode-card-sub">2 PHONES · 1 SCREEN</span>
+      </button>
+    </div>
+  </template>
+
+  <!-- LOBBY -->
+  <template v-else-if="screen === 'lobby'">
+    <div class="screen">
+      <div class="lobby-card">
+        <div class="lobby-header">
+          <span class="status-dot" :class="{ connected }"></span>
+          <span class="lobby-mode-label">Phone Controllers</span>
+        </div>
+
+        <div class="room-code-block" v-if="roomCode">
+          <div class="room-code-label">Room code</div>
+          <div class="room-code">{{ roomCode }}</div>
+          <div class="room-code-hint">Scan with phone or open /play</div>
+        </div>
+
+        <div class="qr-panel" ref="qrContainer" v-show="roomCode"></div>
+
+        <div class="couch-player-list">
+          <div
+            v-for="n in 2"
+            :key="n"
+            class="couch-player-slot"
+            :class="{ connected: couchControllers >= n, p1: n === 1, p2: n === 2 }"
+          >
+            <span>Player {{ n }}</span>
+            <span class="couch-status">{{ couchControllers >= n ? 'CONNECTED' : 'WAITING' }}</span>
+          </div>
+        </div>
+
+        <button class="btn btn-ready" :disabled="couchControllers < 1" @click="sendReady">
+          <span v-if="couchControllers < 1">WAITING FOR PLAYERS…</span>
+          <span v-else>&gt;&gt; PRESS START &lt;&lt;</span>
+        </button>
+
+        <button class="btn btn-ghost" @click="goBack">Back</button>
+      </div>
+    </div>
+  </template>
+
+  <!-- GAME -->
+  <template v-else-if="screen === 'game'">
+    <div class="game-wrapper">
+      <canvas ref="gameCanvas" id="game-canvas" :width="CANVAS_W" :height="CANVAS_H"></canvas>
+
+      <div class="hud">
+        <div
+          v-for="(player, idx) in gameData.players"
+          :key="player.id"
+          class="player-hud"
+          :style="idx === 1 ? 'text-align:right;align-items:flex-end;' : 'align-items:flex-start;'"
+        >
+          <div class="player-hud-label" :style="{ color: player.id === 0 ? '#00d4ff' : '#ff6b35' }">
+            Player {{ player.id + 1 }}
+            <span v-if="!player.alive" style="color:#ff4444;font-size:10px;"> (Dead)</span>
+          </div>
+
+          <template v-if="!player.alive">
+            <div class="respawn-msg">Needs Revive</div>
+          </template>
+          <template v-else>
+            <div class="health-bar-bg" style="width:120px;">
+              <div
+                class="health-bar-fill"
+                :style="{
+                  width: Math.max(0, Math.min(100, player.hp)) + '%',
+                  backgroundColor: hpColorForPlayer(player.hp)
+                }"
+              ></div>
+            </div>
+          </template>
+
+          <div class="player-score" v-if="player.score !== undefined">
+            Score: {{ player.score }}
+          </div>
+        </div>
+      </div>
+
+      <div class="hud-center" v-if="waveNumber > 0">Wave {{ waveNumber }}</div>
+      <div class="wave-banner" v-if="waveBanner">{{ waveBanner }}</div>
+      <button class="btn-quit" @click="playAgain" title="Quit">&#x2715;</button>
+    </div>
+  </template>
+
+  <!-- GAME OVER -->
+  <template v-else-if="screen === 'gameover'">
+    <div class="screen gameover-screen">
+      <div class="gameover-result">
+        <div class="result-title">Game Over</div>
+      </div>
+
+      <div class="gameover-stats">
+        <div class="stat-block">
+          <div class="stat-value">{{ finalScore }}</div>
+          <div class="stat-label">Score</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-block">
+          <div class="stat-value">{{ waveNumber }}</div>
+          <div class="stat-label">Wave Reached</div>
+        </div>
+      </div>
+
+      <button class="btn btn-play-again" @click="playAgain">
+        &gt;&gt; CONTINUE? &lt;&lt;
+      </button>
+    </div>
+  </template>
+
+</div>
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

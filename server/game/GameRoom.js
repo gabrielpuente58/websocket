@@ -3,7 +3,7 @@
 const Player = require('./Player');
 const Bot = require('./Bot');
 const Bullet = require('./Bullet');
-const GameMap = require('./Map');
+const { GameMap } = require('./Map');
 const Powerup = require('./Powerup');
 
 const TICK_RATE_MS = 50; // 20 ticks per second
@@ -44,6 +44,7 @@ class GameRoom {
     this.bots = [];
     this.bullets = [];
     this.powerups = [];
+    this.display = null; // couch mode: WebSocket of the display client (no player slot)
     this.gameState = 'waiting'; // 'waiting' | 'playing' | 'over'
     this.wave = 0;
     this.tickCount = 0;
@@ -61,7 +62,12 @@ class GameRoom {
    * Add a player to the room. Assigns spawn position from map.
    */
   addPlayer(ws) {
-    const id = this.players.length; // 0 or 1
+    // Assign the lowest free slot id (0 or 1) so churn in the lobby reuses slots.
+    const used = new Set(this.players.map(p => p.id));
+    let id = 0;
+    while (used.has(id) && id < 2) id++;
+    if (id >= 2) return null; // room is full
+
     const player = new Player(id);
     const spawn = this.map.playerSpawns[id];
     player.x = spawn.x;
@@ -71,6 +77,11 @@ class GameRoom {
     player.ws = ws;
     this.players.push(player);
     return player;
+  }
+
+  /** Register the display client (laptop) that renders the game. */
+  setDisplay(ws) {
+    this.display = ws;
   }
 
   startGame() {
@@ -87,10 +98,18 @@ class GameRoom {
   _startGame() {
     this.gameState = 'playing';
 
+    // Each player gets their own id; display (couch mode) gets a neutral payload.
     for (const player of this.players) {
       this._sendTo(player.ws, {
         type: 'game_start',
         playerId: player.id,
+        map: this.map.toJSON(),
+      });
+    }
+    if (this.display) {
+      this._sendTo(this.display, {
+        type: 'game_start',
+        playerId: null,     // display is an observer
         map: this.map.toJSON(),
       });
     }
@@ -265,24 +284,49 @@ class GameRoom {
     }
   }
 
+  /** Send to every connected socket in the room (players + display if any). */
   broadcast(msg) {
     const data = JSON.stringify(msg);
     for (const player of this.players) this._sendRaw(player.ws, data);
+    if (this.display) this._sendRaw(this.display, data);
   }
 
   _broadcastState() {
-    this.broadcast({
+    // Display (laptop) gets the full state. Phones only need HUD data.
+    const fullData = JSON.stringify({
       type: 'game_state',
       players: this.players.map(p => p.toJSON()),
       bots: this.bots.map(b => b.toJSON()),
       bullets: this.bullets.map(b => b.toJSON()),
       powerups: this.powerups.map(p => p.toJSON()),
     });
+
+    if (this.display) this._sendRaw(this.display, fullData);
+    for (const player of this.players) {
+      this._sendTo(player.ws, {
+        type: 'controller_state',
+        playerId: player.id,
+        hp: player.hp,
+        maxHp: player.maxHp,
+        alive: player.alive,
+        shield: player.shield,
+        rapidFire: player.rapidFire,
+        score: player.score,
+        wave: this.wave,
+        reviveProgress: player.reviveProgress,
+      });
+    }
   }
 
   removePlayer(playerId) {
     if (this.gameState === 'playing') this._endGame('lose');
     this.players = this.players.filter(p => p.id !== playerId);
+  }
+
+  /** Called when the display disconnects. Ends the game — can't play blind. */
+  removeDisplay() {
+    this.display = null;
+    if (this.gameState === 'playing') this._endGame('lose');
   }
 
   _sendTo(ws, msg) { this._sendRaw(ws, JSON.stringify(msg)); }

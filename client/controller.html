@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#020a02" />
+  <title>Controller — Co-op Shooter</title>
+  <link rel="stylesheet" href="controller.css" />
+</head>
+<body>
+
+  <!-- Code entry screen (shown if no ?code= in URL) -->
+  <div id="code-screen" class="screen hidden">
+    <div class="panel">
+      <div class="title">CONTROLLER</div>
+      <div class="sub">Enter the code shown on the display</div>
+      <input id="code-input" type="text" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="ABC123" />
+      <div id="code-error" class="error"></div>
+      <button id="code-submit" class="btn">JOIN</button>
+    </div>
+  </div>
+
+  <!-- Connecting screen -->
+  <div id="connect-screen" class="screen hidden">
+    <div class="panel">
+      <div class="spinner"></div>
+      <div class="sub" id="connect-msg">Connecting...</div>
+    </div>
+  </div>
+
+  <!-- Waiting for game to start -->
+  <div id="wait-screen" class="screen hidden">
+    <div class="panel">
+      <div class="badge" id="wait-badge">Player ?</div>
+      <div class="sub" id="wait-msg">Waiting for host to start the game…</div>
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <!-- Play screen -->
+  <div id="play-screen" class="screen hidden">
+    <div class="hud">
+      <div class="hud-label" id="hud-label">P1</div>
+      <div class="hud-hpbar"><div id="hud-hpfill" class="hud-hpfill"></div></div>
+      <div class="hud-score" id="hud-score">0</div>
+    </div>
+
+    <div id="hud-status" class="hud-status"></div>
+
+    <!-- Left half: joystick zone -->
+    <div id="joystick-zone" class="zone zone-left">
+      <div id="joystick-base" class="joystick-base hidden">
+        <div id="joystick-knob" class="joystick-knob"></div>
+      </div>
+      <div class="zone-hint">MOVE</div>
+    </div>
+
+    <!-- Right half: shoot zone -->
+    <div id="shoot-zone" class="zone zone-right">
+      <div id="shoot-button" class="shoot-button">
+        <div class="shoot-inner">FIRE</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game over screen -->
+  <div id="over-screen" class="screen hidden">
+    <div class="panel">
+      <div class="title" id="over-title">GAME OVER</div>
+      <div class="sub" id="over-score">Score: 0 · Wave: 0</div>
+      <button id="over-back" class="btn">LEAVE</button>
+    </div>
+  </div>
+
+  <script src="controller.js"></script>
+</body>
+</html>

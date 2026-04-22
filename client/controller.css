@@ -1,0 +1,289 @@
+:root {
+  --green:   #00ff41;
+  --green2:  #00cc33;
+  --dim:     #006622;
+  --amber:   #ffb000;
+  --red:     #ff3333;
+  --blue:    #00aaff;
+  --cyan:    #00d4ff;
+  --orange:  #ff6b35;
+  --white:   #ccffcc;
+  --bg:      #020a02;
+  --card:    #030f03;
+  --mono:    'Share Tech Mono', 'Courier New', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--green);
+  font-family: var(--mono);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+.screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.hidden { display: none !important; }
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--green);
+  box-shadow: 0 0 24px rgba(0,255,65,0.12);
+  padding: 28px 32px;
+  min-width: 260px;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.title {
+  font-size: 1.6rem;
+  letter-spacing: 6px;
+  color: var(--green);
+  text-shadow: 0 0 10px var(--green);
+}
+
+.sub {
+  font-size: 0.85rem;
+  color: var(--dim);
+  letter-spacing: 1px;
+}
+
+.badge {
+  font-size: 1.3rem;
+  letter-spacing: 3px;
+  padding: 6px 20px;
+  border: 1px solid currentColor;
+  color: var(--cyan);
+}
+
+.badge.p1 { color: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 14px rgba(0,212,255,0.3); }
+.badge.p2 { color: var(--orange); border-color: var(--orange); box-shadow: 0 0 14px rgba(255,107,53,0.3); }
+
+.error {
+  color: var(--red);
+  font-size: 0.8rem;
+  min-height: 1em;
+  letter-spacing: 1px;
+}
+
+#code-input {
+  width: 100%;
+  padding: 12px;
+  background: rgba(0,255,65,0.04);
+  border: 1px solid var(--green);
+  color: var(--amber);
+  font-family: var(--mono);
+  font-size: 1.8rem;
+  letter-spacing: 10px;
+  text-align: center;
+  text-transform: uppercase;
+  outline: none;
+  caret-color: var(--amber);
+}
+
+.btn {
+  padding: 12px 28px;
+  background: transparent;
+  border: 1px solid var(--green);
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 1rem;
+  letter-spacing: 3px;
+  cursor: pointer;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.btn:active { background: rgba(0,255,65,0.15); }
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--dim);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Play screen ───────────────────────────────────────────────────────────── */
+
+#play-screen {
+  display: flex;
+  flex-direction: row;
+  padding: 0;
+}
+
+.hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(to bottom, rgba(2,10,2,0.9), transparent);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.hud-label {
+  font-size: 1rem;
+  letter-spacing: 2px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  color: var(--cyan);
+}
+
+.hud-label.p2 { color: var(--orange); }
+
+.hud-hpbar {
+  flex: 1;
+  height: 12px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  overflow: hidden;
+  max-width: 200px;
+}
+
+.hud-hpfill {
+  height: 100%;
+  width: 100%;
+  background: var(--green);
+  transition: width 0.18s ease, background-color 0.3s ease;
+}
+
+.hud-score {
+  color: var(--amber);
+  font-size: 0.95rem;
+  letter-spacing: 1px;
+  min-width: 50px;
+  text-align: right;
+}
+
+.hud-status {
+  position: fixed;
+  top: 46px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: var(--red);
+  font-size: 1.2rem;
+  letter-spacing: 4px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.zone {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.zone-left  { border-right: 1px dashed rgba(0,255,65,0.08); }
+
+.zone-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(0,255,65,0.12);
+  font-size: 2.5rem;
+  letter-spacing: 8px;
+  pointer-events: none;
+}
+
+/* Joystick */
+.joystick-base {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  margin-left: -90px;
+  margin-top: -90px;
+  border-radius: 50%;
+  background: rgba(0,255,65,0.04);
+  border: 2px solid rgba(0,255,65,0.25);
+  pointer-events: none;
+}
+
+.joystick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 72px;
+  height: 72px;
+  margin-left: -36px;
+  margin-top: -36px;
+  border-radius: 50%;
+  background: rgba(0,255,65,0.25);
+  border: 2px solid var(--green);
+  box-shadow: 0 0 16px rgba(0,255,65,0.4);
+  pointer-events: none;
+}
+
+/* Shoot button */
+.shoot-button {
+  position: absolute;
+  bottom: 60px;
+  right: 40px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 2px solid var(--amber);
+  background: radial-gradient(circle, rgba(255,176,0,0.2), rgba(255,176,0,0.06));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(255,176,0,0.3);
+  transition: transform 0.06s, background 0.08s;
+  pointer-events: none;
+}
+
+.shoot-inner {
+  color: var(--amber);
+  font-size: 1.4rem;
+  letter-spacing: 3px;
+  text-shadow: 0 0 10px var(--amber);
+}
+
+.shoot-button.active {
+  transform: scale(0.92);
+  background: radial-gradient(circle, rgba(255,176,0,0.5), rgba(255,176,0,0.15));
+  box-shadow: 0 0 32px rgba(255,176,0,0.6);
+}
+
+/* Landscape: make shoot button thumb-reachable on bottom-right */
+@media (orientation: landscape) {
+  .shoot-button { bottom: 40px; right: 40px; width: 160px; height: 160px; }
+  .joystick-base { width: 220px; height: 220px; margin-left: -110px; margin-top: -110px; }
+  .joystick-knob { width: 80px; height: 80px; margin-left: -40px; margin-top: -40px; }
+}
+
+/* Portrait: slightly smaller */
+@media (orientation: portrait) and (max-height: 700px) {
+  .shoot-button { width: 120px; height: 120px; bottom: 50px; right: 30px; }
+}

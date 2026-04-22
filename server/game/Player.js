@@ -29,6 +29,7 @@ class Player {
 
     // Movement
     this.speed = 0.12;
+    this.radius = 0.4; // in tiles — used for wall collision
 
     // Shooting
     this.SHOOT_COOLDOWN = 12;
@@ -47,13 +48,25 @@ class Player {
     this.ws = null;
   }
 
-  /**
-   * Store input values. dx/dy clamped to -1, 0, or 1.
-   */
+  /** Store input values. dx/dy accept continuous floats in [-1, 1] from phone joysticks. */
   applyInput(dx, dy, shooting) {
-    this._dx = Math.max(-1, Math.min(1, Math.sign(dx === 0 ? 0 : dx)));
-    this._dy = Math.max(-1, Math.min(1, Math.sign(dy === 0 ? 0 : dy)));
+    const nx = Number(dx);
+    const ny = Number(dy);
+    this._dx = Number.isFinite(nx) ? Math.max(-1, Math.min(1, nx)) : 0;
+    this._dy = Number.isFinite(ny) ? Math.max(-1, Math.min(1, ny)) : 0;
     this._shooting = !!shooting;
+  }
+
+  /**
+   * Four-corner wall check: player occupies a square of `radius` tiles
+   * around (x, y). Returns true if any corner lands inside a wall tile.
+   */
+  _collides(map, x, y) {
+    const r = this.radius;
+    return map.isWall(x - r, y - r) ||
+           map.isWall(x + r, y - r) ||
+           map.isWall(x - r, y + r) ||
+           map.isWall(x + r, y + r);
   }
 
   /**
@@ -70,30 +83,38 @@ class Player {
       if (this.rapidFireTimer === 0) this.rapidFire = false;
     }
 
-    const moveX = this._dx * this.speed;
-    const moveY = this._dy * this.speed;
+    // Clamp input magnitude to 1 so diagonals don't go faster than cardinals.
+    let ix = this._dx;
+    let iy = this._dy;
+    const mag = Math.hypot(ix, iy);
+    if (mag > 1) { ix /= mag; iy /= mag; }
+
+    const moveX = ix * this.speed;
+    const moveY = iy * this.speed;
 
     if (moveX !== 0) {
       const nx = this.x + moveX;
-      if (!map.isWall(nx, this.y)) this.x = nx;
+      if (!this._collides(map, nx, this.y)) this.x = nx;
     }
 
     if (moveY !== 0) {
       const ny = this.y + moveY;
-      if (!map.isWall(this.x, ny)) this.y = ny;
+      if (!this._collides(map, this.x, ny)) this.y = ny;
     }
 
     if (this.shootCooldown > 0) this.shootCooldown--;
 
-    if (this._dx !== 0 || this._dy !== 0) {
-      this._lastDx = this._dx;
-      this._lastDy = this._dy;
+    // Remember last *unit* direction for aiming when stationary.
+    if (mag > 0.05) {
+      const m = mag > 1 ? 1 : mag;
+      this._lastDx = ix / (m || 1);
+      this._lastDy = iy / (m || 1);
     }
 
     if (this._shooting && this.shootCooldown === 0) {
       const ddx = this._lastDx;
       const ddy = this._lastDy;
-      const len = Math.sqrt(ddx * ddx + ddy * ddy);
+      const len = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
       this.shootCooldown = this.rapidFire ? 4 : this.SHOOT_COOLDOWN;
       return new Bullet(this.x, this.y, ddx / len, ddy / len, this.id);
     }
